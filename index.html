@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+	<title>Track</title>
+	<style type="text/css">
+		html {
+			height: 100%
+		}
+
+		/* 隐藏 logo */
+		.anchorBL {
+			display: none;
+		}
+
+		body {
+			height: 100%;
+			margin: 0px;
+			padding: 0px
+		}
+
+		#controller {
+			width: 100%;
+			filter: alpha(Opacity=100);
+			-moz-opacity: 1;
+			opacity: 1;
+			z-index: 10000;
+			background-color: lightblue;
+			position:fixed;
+		}
+
+		#container {
+			height: 100%
+		}
+
+		input {
+			font-size: 15px;
+		}
+	</style>
+	<link rel="stylesheet" href="lib/weui.min.css">
+	<link rel="stylesheet" href="css/jquery-weui.min.css">
+	<script type="text/javascript" src="http://api.map.baidu.com/api?v=2.0&ak=iRLG7rhuXFeDOe8ggExPaisQ"></script>
+</head>
+
+<body>
+<div id="controller">
+	<div class="weui-slider-box" id="slider">
+		<span style="margin-left: 0.3rem;">播放速度</span>
+		<div class="weui-slider">
+			<div id="sliderInner" class="weui-slider__inner">
+				<div id="sliderTrack" style="width: 40%;" class="weui-slider__track"></div>
+				<div id="sliderHandler" style="left: 40%;" class="weui-slider__handler"></div>
+			</div>
+		</div>
+		<div id="sliderValue" class="weui-slider-box__value">40</div>
+	</div>
+	<div style="font-size: 16px;margin-left: 0.2rem;margin-bottom: 0.2rem;" align="center">
+		<span style="font-size: 16px;margin-right: 0.3rem;">操作</span>
+		<select id="btn" onchange="selectFunction(this)">
+			<option value="">请选择操作</option>
+			<option value="play">播放</option>
+			<option value="pause" disabled="disabled">暂停</option>
+			<option value="reset" disabled="disabled">重置</option>
+			<option value="lastOne">最新位置</option>
+		</select>
+		<span style="font-size: 16px;margin-right: 0.3rem;margin-left: 1rem;">日期</span>
+		<input class="weui-input font-input date-input" type="text" style="width: 40%;border: 1px solid #868484;" data-toggle='date' id="trackDate" name="trackDate"  placeholder="请选择日期" />
+		<div class="weui-loadmore" id="loading" style="display: block;z-index: 99999999999;">
+			<i class="weui-loading"></i>
+			<span class="weui-loadmore__tips">地图正在加载,请稍后...</span>
+		</div>
+	</div>
+</div>
+<div id="container"></div>
+<script src="lib/jquery-2.1.4.js"></script>
+<script src="js/jquery-weui.js"></script>
+<script src="js/util.js"></script>
+<script type="text/javascript">
+	
+	/*********************************************
+	 * 测试数据
+	 **/
+	 let tempPoints = [
+		new BMap.Point(114.001, 22.55),
+		new BMap.Point(114.0013, 22.55),
+		new BMap.Point(114.0016, 22.55),
+		new BMap.Point(114.002, 22.55),
+		new BMap.Point(114.003, 22.5505),
+		new BMap.Point(114.004, 22.55),
+		new BMap.Point(114.005, 22.55),
+		new BMap.Point(114.00505, 22.5498),
+		new BMap.Point(114.0051, 22.55),
+		new BMap.Point(114.00515, 22.55),
+		new BMap.Point(114.00525, 22.5504),
+		];
+	let tempCurrentPoint = tempPoints[tempPoints.length-1];
+	 /*******************************************/
+	 
+	 
+	 
+	let currentDate = new Date();
+	$("#trackDate").val(getLocalTime(undefined,'1'))
+	$("#trackDate").calendar({
+		dateFormat: 'yyyy-mm-dd',
+		onChange: function (p, values, displayValues) {
+		},
+		value:[getLocalTime(undefined,'1')],
+		onClose:function(){
+			points = [];
+			clearAll();
+			car = null
+			getViaPoints();
+			reset();
+		}
+	}); //开始日期初始化
+	function selectFunction(res){
+		if(res.value==="play"){
+			//禁用播放按钮
+			$("#btn option[value='play']").attr("disabled", true)
+			play()
+		}else{
+			$("#btn option[value='play']").attr("disabled", false)
+		}
+
+		if(res.value==="pause"){
+			$("#btn option[value='pause']").attr("disabled", true)
+			pause()
+		}else{
+			$("#btn option[value='pause']").attr("disabled", false)
+		}
+		if(res.value==='reset'){
+			$("#btn option[value='reset']").attr("disabled", true)
+			reset()
+		}else{
+			$("#btn option[value='reset']").attr("disabled", false)
+		}
+		if(res.value==='lastOne'){
+			findLastPoint()
+		}
+	}
+	let lastFlag = false;
+	/**
+	 * 获取当前最后一次出现的坐标点
+	 */
+	function findLastPoint() {
+		$("#btn option[value='pause']").attr("disabled", true)
+		lastFlag = true;
+		token = loginTrackPlatform();
+		if (token != undefined && token != null) {
+			let url = "/track/findLastTrackByCardNo";
+			let type = "GET";
+			let apiData = {
+				"cardNo": "123"
+			};
+			let headers = {
+				'Authorization': 'Beaere ' + token
+			};
+			let data = syncHttpRequestToServer(url, type, apiData, headers);
+			if (data != null) {
+				let lastPoint = new BMap.Point(data.data.longitude, data.data.latitude)
+				map.centerAndZoom(lastPoint, 19);
+				clearAll();
+				car = new BMap.Marker(lastPoint);
+				getAddress(lastPoint, label);
+				car.setLabel(label);
+				map.addOverlay(car);
+			} else {
+				$.toast("今日暂无最新位置信息", "forbidden");
+			}
+		}else{
+			//无法连接服务器,使用测试数据
+			let lastPoint = tempCurrentPoint
+			map.centerAndZoom(lastPoint, 19);
+			clearAll();
+			car = new BMap.Marker(lastPoint);
+			getAddress(lastPoint, label);
+			car.setLabel(label);
+			map.addOverlay(car);
+		}
+	}
+
+	/**
+	 * 清除地图上所有的标注
+	 */
+	function clearAll() {
+		map.clearOverlays()
+	}
+
+	let token;
+
+	/**
+	 * 获取轨迹信息
+	 */
+	function getViaPoints() {
+		token = loginTrackPlatform();
+		if (token != undefined && token != null) {
+			let url = "/track/getTrackByCardNo";
+			let type = "GET";
+			let apiData = {
+				"cardNo": "123",
+				"selectedDate": $('#trackDate').val()
+			};
+			let headers = {
+				'Authorization': 'Beaere ' + token
+			};
+			let data = syncHttpRequestToServer(url, type, apiData, headers);
+			if (data != null&&data.length>0) {
+				data.forEach(c => {
+					points.push(new BMap.Point(c.longitude, c.latitude));
+				});
+			}
+			init();
+		}else{
+			//无法连接服务器,使用测试数据
+			points = tempPoints
+			init()
+		}
+	}
+
+	$('#slider').slider(function(percent) {
+		if (!document.getElementById('sliderHandler').contains(window.event.srcElement)) {
+			this.touching = false
+		}
+		//数值大的,反而小,反比算法 --限制范围最慢速度1000,最快速度200
+		speed = (100 / (percent <= 16 ? 16 / 2 : percent / 2)) * 100;
+	});
+	//获取所有点的坐标
+	let points = [];
+	let map; //百度地图对象
+	let car; //汽车图标
+	let label; //信息标签
+	let centerPoint;
+	let speed = 500;
+	let timer; //定时器
+	let index = 0; //记录播放到第几个point
+	let gc;
+	let local
+	function init() {
+		$("#loading").show();
+		gc = new BMap.Geocoder();
+		local = new BMap.Geolocation()
+		//初始化地图,选取第一个点为起始点
+		map = new BMap.Map("container");
+		let pointsFlag = (points!=undefined&&points.length>0);
+		if(!pointsFlag){
+			$.toast("当前所选日期，暂无轨迹信息", "forbidden");
+			local.getCurrentPosition((res)=>{
+				centerPoint = res.point
+				map.centerAndZoom(res.point, 19);
+				map.enableScrollWheelZoom(true);
+				$("#loading").hide();
+			});
+		}else{
+			$("#loading").hide()
+		}
+		// map.addControl(new BMap.NavigationControl());
+		// map.addControl(new BMap.ScaleControl());
+		//显示小地图
+		/* map.addControl(new BMap.OverviewMapControl({
+            isOpen: true
+        })); */
+
+		//通过DrivingRoute获取一条路线的point
+		if(pointsFlag){
+			map.centerAndZoom(points[0], 19);
+			map.enableScrollWheelZoom(true);
+			var driving = new BMap.DrivingRoute(map, {
+				renderOptions: {
+					map: map,
+					autoViewport: true
+				}
+			});
+			//使用规划线路,若不使用,此处不进行赋值即可
+			driving.search(points[0], points[points.length - 1]);
+			driving.setSearchCompleteCallback(()=>{
+				let startPoint = points[0];
+				//得到路线上的所有point
+				points = driving.getResults().getPlan(0).getRoute(0).getPath();
+				points[0] = startPoint;
+				//画面移动到起点和终点的中间
+				centerPoint = new BMap.Point((points[0].lng + points[points.length - 1].lng) / 2, (points[0].lat + points[points
+						.length - 1].lat) / 2);
+				map.panTo(centerPoint);
+				//连接所有点
+				map.addOverlay(new BMap.Polyline(points, {
+					strokeColor: "dodgerblue",
+					strokeWeight: 5,
+					strokeOpacity: 1
+				}));
+
+				//显示标签
+				label = new BMap.Label("", {
+					offset: new BMap.Size(-20, -20)
+				});
+				car = new BMap.Marker(points[0]);
+				car.setLabel(label);
+				map.addOverlay(car);
+
+				//点亮操作选项
+				$("#btn option[value='play']").attr("disabled", false)
+				$("#btn option[value='reset']").attr("disabled", true)
+				$("#btn option[value='lastOne']").attr("disabled", false)
+			});
+		}
+		// driving.search(points[0], points[points.length-1],{waypoints:points});//waypoints表示途经点
+	}
+
+	function play(res) {
+		if (lastFlag) {
+			lastFlag = false;
+			init();
+		}
+		$("#btn option[value='play']").attr("disabled", true)
+		$("#btn option[value='pause']").attr("disabled", false)
+		$("#btn option[value='lastOne']").attr("disabled", true)
+		//最大化显示当前起始位置
+		map.centerAndZoom(points[index], 19);
+		let point = points[index];
+		if (index > 0) {
+			map.addOverlay(new BMap.Polyline([points[index - 1], point], {
+				strokeColor: "red",
+				strokeWeight: 1,
+				strokeOpacity: 1
+			}));
+		}
+		// label.setContent("经度: " + point.lng + "<br>纬度: " + point.lat);
+		getAddress(point, label, index);
+		car.setPosition(point);
+		index++;
+		let bound = map.getBounds(); //地图可视区域
+		if (bound.containsPoint(point) == false) {
+			map.panTo(point);
+		}
+		if (index < points.length) {
+			//play speed
+			timer = window.setTimeout("play(" + index + ")", speed);
+		} else {
+			$("#btn option[value='play']").attr("disabled", true)
+			$("#btn option[value='pause']").attr("disabled", true)
+			map.panTo(point);
+			//播放点置零
+			index = 0;
+		}
+	}
+
+	/**
+	 * 根据坐标点，获取地址名称
+	 */
+	function getAddress(thisPoint, label) {
+		gc.getLocation(thisPoint, function(rs) {
+			let address = rs.surroundingPois[0]; //获取当前相似度最近的
+			let addComp = rs.addressComponents;
+			if (address == undefined) {
+				address = addComp.district + addComp.street + addComp.streetNumber; //获取地址
+			} else {
+				address = address.title;
+			}
+			label.setContent("经过:" + address);
+		});
+	}
+
+	function pause() {
+		$("#btn option[value='play']").attr("disabled", false)
+		$("#btn option[value='pause']").attr("disabled", true)
+		$("#btn option[value='lastOne']").attr("disabled", true)
+		if (timer) {
+			window.clearTimeout(timer);
+		}
+	}
+
+	function reset() {
+		$("#btn option[value='play']").attr("disabled", false)
+		$("#btn option[value='pause']").attr("disabled", true)
+		$("#btn option[value='lastOne']").attr("disabled", false)
+		if (timer) {
+			window.clearTimeout(timer);
+		}
+		clearAll();
+		if (lastFlag) {
+			lastFlag = false;
+		}
+		init();
+		map.centerAndZoom(points[0], 16);
+		// car.setPosition(points[0]);
+		map.panTo(centerPoint);
+		//播放点置零
+		index = 0;
+	}
+
+	function getLocalTime(nS,type) {
+		let time = nS===undefined?currentDate:Date(nS);
+		let str = '';
+		let month = time.getMonth() + 1;
+		month = month > 9 ? month : "0" + month; //如果月份小于10,则在前面加0补充为两位数字
+		let day = time.getDate();
+		day = day > 9 ? day : "0" + day; //如果月份小于10,则在前面加0补充为两位数字
+		if(type!=undefined){
+			return  time.getFullYear() + "-" + month + "-" + day
+		}
+		let hour = time.getHours() > 9 ? time.getHours() : "0" + time.getHours();
+		let minut = time.getMinutes() > 9 ? time.getMinutes() : "0" + time.getMinutes();
+		let second = time.getSeconds() > 9 ? time.getSeconds() : "0" + time.getSeconds();
+		str += time.getFullYear() + "-" + month + "-" + day + " " + hour + ":" + minut + ":" + second;
+		return str;
+	}
+
+	window.onload = getViaPoints();
+</script>
+</body>
+</html>
