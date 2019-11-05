@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 	<title>Track</title>
@@ -146,7 +147,7 @@
 	function findLastPoint() {
 		$("#btn option[value='pause']").attr("disabled", true)
 		lastFlag = true;
-		token = loginTrackPlatform();
+		// token = loginTrackPlatform();
 		if (token != undefined && token != null) {
 			let url = "/track/findLastTrackByCardNo";
 			let type = "GET";
@@ -169,7 +170,7 @@
 				$.toast("今日暂无最新位置信息", "forbidden");
 			}
 		}else{
-			//无法连接服务器,使用测试数据
+			// 无法连接服务器,使用测试数据
 			let lastPoint = tempCurrentPoint
 			map.centerAndZoom(lastPoint, 19);
 			clearAll();
@@ -193,7 +194,7 @@
 	 * 获取轨迹信息
 	 */
 	function getViaPoints() {
-		token = loginTrackPlatform();
+		// token = loginTrackPlatform();
 		if (token != undefined && token != null) {
 			let url = "/track/getTrackByCardNo";
 			let type = "GET";
